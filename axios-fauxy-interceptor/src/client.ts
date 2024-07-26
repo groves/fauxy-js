@@ -1,7 +1,9 @@
 import axios, {
   AxiosRequestConfig,
   AxiosResponse,
-  AxiosResponseHeaders,
+  AxiosInstance,
+  CreateAxiosDefaults,
+  InternalAxiosRequestConfig,
 } from "axios";
 import { opendir, readFile, mkdir, writeFile } from "fs/promises";
 import { Readable } from "stream";
@@ -34,12 +36,20 @@ export interface FauxyHashResult {
 
 export interface FauxyConfig {
   proxies: FauxyProxy[];
-  found?: FauxyHashResult;
-  replayed: boolean;
 }
 
 export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
-  fauxy?: FauxyConfig;
+  fauxy: FauxyConfig;
+}
+
+export interface InternalFauxyConfig extends FauxyConfig {
+  matchedProxy?: FauxyHashResult;
+  replayed: boolean;
+}
+
+export interface InternalFauxyRequestConfig<D = any>
+  extends InternalAxiosRequestConfig<D> {
+  fauxy: InternalFauxyConfig;
 }
 
 export interface FauxyAxiosResponse<R = any, D = any>
@@ -47,10 +57,27 @@ export interface FauxyAxiosResponse<R = any, D = any>
   config: InternalFauxyRequestConfig<D>;
 }
 
-export interface InternalFauxyRequestConfig<D = any>
-  extends FauxyRequestConfig<D> {
-  headers: AxiosResponseHeaders;
+export interface FauxyAxiosInstance extends Omit<AxiosInstance, "defaults"> {
+  defaults: AxiosInstance["defaults"] & {
+    fauxy?: FauxyConfig;
+  };
 }
+
+const isErrnoException = (error: any): error is NodeJS.ErrnoException => {
+  return (
+    error instanceof Error &&
+    ("errno" in error ||
+      "code" in error ||
+      "path" in error ||
+      "syscall" in error)
+  );
+};
+
+const isFauxyRequest = (
+  config: InternalAxiosRequestConfig,
+): config is InternalFauxyRequestConfig => {
+  return "fauxy" in config;
+};
 
 async function hash(
   config: InternalFauxyRequestConfig,
@@ -68,17 +95,17 @@ async function hash(
 }
 
 async function requestInterceptor<D>(
-  config: InternalFauxyRequestConfig<D>,
-): Promise<InternalFauxyRequestConfig<D>> {
-  const fauxy = config.fauxy;
-  if (!fauxy) {
+  config: InternalAxiosRequestConfig<D>,
+): Promise<InternalAxiosRequestConfig<D>> {
+  if (!isFauxyRequest(config)) {
     return config;
   }
-  fauxy.found = await hash(config, fauxy);
-  if (!fauxy.found) {
+
+  config.fauxy.matchedProxy = await hash(config, config.fauxy);
+  if (!config.fauxy.matchedProxy) {
     return config;
   }
-  const { libraryDir, hashed } = fauxy.found;
+  const { libraryDir, hashed } = config.fauxy.matchedProxy;
   const iter = await opendir(libraryDir, { recursive: true });
   for await (const entry of iter) {
     if (!entry.isDirectory() || entry.name !== hashed) {
@@ -92,7 +119,7 @@ async function requestInterceptor<D>(
     try {
       metaContent = await readFile(metaPath, "utf-8");
     } catch (error) {
-      if (error.code === "ENOENT") {
+      if (isErrnoException(error) && error.code === "ENOENT") {
         // TODO - wait for possible active recorder
         console.log(`${metaPath} not found, rerecording`);
         return config;
@@ -109,7 +136,7 @@ async function requestInterceptor<D>(
       } else {
         data = await readFile(responsePath, "utf-8");
       }
-      fauxy.replayed = true;
+      config.fauxy.replayed = true;
       return {
         status,
         statusText: STATUS_CODES[status] || "Unknown",
@@ -123,11 +150,18 @@ async function requestInterceptor<D>(
   return config;
 }
 
+const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
+  return "fauxy" in resp;
+};
+
 async function responseInterceptor<T, D>(
-  resp: FauxyAxiosResponse<T, D>,
-): Promise<FauxyAxiosResponse<T, D>> {
-  if (!resp.config.fauxy?.found) {
-    console.log("Response not intercepted: fauxy.found is undefined");
+  resp: AxiosResponse<T, D>,
+): Promise<AxiosResponse<T, D>> {
+  if (!isFauxyResponse(resp)) {
+    return resp;
+  }
+  if (!resp.config.fauxy.matchedProxy) {
+    console.log("Response not intercepted: fauxy.matchedProxy is undefined");
     return resp;
   }
   if (resp.config.fauxy.replayed) {
@@ -144,7 +178,7 @@ async function responseInterceptor<T, D>(
   const pathParts = new URL(resp.config.url).pathname
     .split("/")
     .filter((s) => s !== "");
-  const { libraryDir, hashed } = resp.config.fauxy.found;
+  const { libraryDir, hashed } = resp.config.fauxy.matchedProxy;
   const fullPath = path.join(libraryDir, ...pathParts, hashed);
   await mkdir(fullPath, { recursive: true });
 
@@ -166,7 +200,7 @@ async function responseInterceptor<T, D>(
   } else if (resp.data instanceof Readable) {
     const writer = createWriteStream(contentPath);
     await new Promise((resolve, reject) => {
-      resp.data.pipe(writer);
+      (resp.data as Readable).pipe(writer);
       writer.on("finish", resolve);
       writer.on("error", reject);
     });
@@ -178,6 +212,16 @@ async function responseInterceptor<T, D>(
   return resp;
 }
 
-export const client = axios.create();
-client.interceptors.request.use(requestInterceptor);
-client.interceptors.response.use(responseInterceptor);
+export interface CreateFauxyDefaults<D = any> extends CreateAxiosDefaults<D> {
+  fauxy: FauxyConfig;
+}
+
+export function create<D>(config?: CreateFauxyDefaults<D>): FauxyAxiosInstance {
+  if (!config) {
+    config = { fauxy: { proxies: [] } };
+  }
+  const client = axios.create(config);
+  client.interceptors.request.use(requestInterceptor);
+  client.interceptors.response.use(responseInterceptor);
+  return client;
+}

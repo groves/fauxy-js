@@ -1,5 +1,7 @@
 import assert from "assert";
-import { client } from "./client.js";
+import { create } from "./client.js";
+
+const client = create();
 
 async function main(p0: number) {
   const resp = await client.get("http://localhost:8080/ping");

@@ -1,6 +1,6 @@
 import { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { describe, expect, it } from "vitest";
-import { FauxyRequestConfig, client } from "./client.js";
+import { FauxyRequestConfig, create } from "./client.js";
 
 const dummyAdapter = async (
   config: InternalAxiosRequestConfig,
@@ -19,26 +19,26 @@ const dummyAdapter = async (
 };
 describe("Fauxy interceptors", () => {
   it("don't get in the way without proxying", async () => {
-    client.defaults.fauxy = {
-      proxies: [],
-    };
+    const client = create();
     const resp = await client.get("http://localhost", {
       adapter: dummyAdapter,
     });
     expect(resp.data).to.equal(true);
   });
   it("replay recordings", async () => {
-    client.defaults.fauxy = {
-      proxies: [
-        {
-          keyMaker: (config: FauxyRequestConfig) => ({
-            path: config.url,
-          }),
-          libraryDir: "recordings",
-          headerProcessors: [],
-        },
-      ],
-    };
+    const client = create({
+      fauxy: {
+        proxies: [
+          {
+            keyMaker: (config: FauxyRequestConfig) => ({
+              path: config.url ?? null,
+            }),
+            libraryDir: "recordings",
+            headerProcessors: [],
+          },
+        ],
+      },
+    });
     const resp = await client.get("http://localhost", {
       adapter: dummyAdapter,
     });
