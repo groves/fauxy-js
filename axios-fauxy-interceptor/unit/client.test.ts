@@ -1,6 +1,6 @@
 import { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { describe, expect, it } from "vitest";
-import { FauxyRequestConfig, create } from "./client.js";
+import { FauxyRequestConfig, create } from "../src/client.js";
 
 const dummyAdapter = async (
   config: InternalAxiosRequestConfig,

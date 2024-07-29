@@ -111,7 +111,7 @@ async function requestInterceptor<D>(
     if (!entry.isDirectory() || entry.name !== hashed) {
       continue;
     }
-    const entryPath = path.join(libraryDir, entry.name);
+    const entryPath = path.join(entry.parentPath, entry.name);
     const metaPath = path.join(entryPath, "meta.json");
     const responsePath = path.join(entryPath, "response.content");
 
@@ -121,7 +121,7 @@ async function requestInterceptor<D>(
     } catch (error) {
       if (isErrnoException(error) && error.code === "ENOENT") {
         // TODO - wait for possible active recorder
-        console.log(`${metaPath} not found, rerecording`);
+        console.log(`${metaPath} doesn't exist, recording`);
         return config;
       }
       throw error;
@@ -151,7 +151,7 @@ async function requestInterceptor<D>(
 }
 
 const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
-  return "fauxy" in resp;
+  return "fauxy" in resp.config;
 };
 
 async function responseInterceptor<T, D>(
