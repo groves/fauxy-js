@@ -12,6 +12,7 @@ import path from "path";
 import { blake2b } from "hash-wasm";
 import { URL } from "url";
 import { STATUS_CODES } from "http";
+import { makeURL } from "./makeURL.js";
 
 type AnyJson = boolean | number | string | null | JsonArray | JsonObject;
 interface JsonArray extends Array<AnyJson> {}
@@ -20,8 +21,8 @@ interface JsonObject {
 }
 
 type KeyMaker =
-  | ((config: FauxyRequestConfig) => JsonObject | null)
-  | ((config: FauxyRequestConfig) => Promise<JsonObject | null>);
+  | ((config: InternalFauxyRequestConfig) => JsonObject | null)
+  | ((config: InternalFauxyRequestConfig) => Promise<JsonObject | null>);
 
 export interface FauxyProxy {
   keyMaker: KeyMaker;
@@ -45,6 +46,7 @@ export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
 export interface InternalFauxyConfig extends FauxyConfig {
   matchedProxy?: FauxyHashResult;
   replayed: boolean;
+  resolved: URL;
 }
 
 export interface InternalFauxyRequestConfig<D = any>
@@ -63,6 +65,15 @@ export interface FauxyAxiosInstance extends Omit<AxiosInstance, "defaults"> {
   };
 }
 
+const isFauxyRequest = (
+  config: InternalAxiosRequestConfig,
+): config is InternalFauxyRequestConfig => {
+  return "fauxy" in config;
+};
+const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
+  return "fauxy" in resp.config;
+};
+
 const isErrnoException = (error: any): error is NodeJS.ErrnoException => {
   return (
     error instanceof Error &&
@@ -71,12 +82,6 @@ const isErrnoException = (error: any): error is NodeJS.ErrnoException => {
       "path" in error ||
       "syscall" in error)
   );
-};
-
-const isFauxyRequest = (
-  config: InternalAxiosRequestConfig,
-): config is InternalFauxyRequestConfig => {
-  return "fauxy" in config;
 };
 
 async function hash(
@@ -101,6 +106,7 @@ async function requestInterceptor<D>(
     return config;
   }
 
+  config.fauxy.resolved = makeURL(config);
   config.fauxy.matchedProxy = await hash(config, config.fauxy);
   if (!config.fauxy.matchedProxy) {
     return config;
@@ -150,10 +156,6 @@ async function requestInterceptor<D>(
   return config;
 }
 
-const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
-  return "fauxy" in resp.config;
-};
-
 async function responseInterceptor<T, D>(
   resp: AxiosResponse<T, D>,
 ): Promise<AxiosResponse<T, D>> {
@@ -175,7 +177,7 @@ async function responseInterceptor<T, D>(
     return resp;
   }
 
-  const pathParts = new URL(resp.config.url).pathname
+  const pathParts = resp.config.fauxy.resolved.pathname
     .split("/")
     .filter((s) => s !== "");
   const { libraryDir, hashed } = resp.config.fauxy.matchedProxy;

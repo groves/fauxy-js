@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "text/plain; charset=utf-8",
+    "content-length": "8",
+    "date": "Fri, 02 Aug 2024 12:10:38 GMT",
+    "connection": "keep-alive",
+    "keep-alive": "timeout=72"
+  }
+}
