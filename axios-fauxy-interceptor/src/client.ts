@@ -13,6 +13,7 @@ import { blake2b } from "hash-wasm";
 import { URL } from "url";
 import { STATUS_CODES } from "http";
 import { makeURL } from "./makeURL.js";
+import { buffer } from "stream/consumers";
 
 type AnyJson = boolean | number | string | null | JsonArray | JsonObject;
 interface JsonArray extends Array<AnyJson> {}
@@ -137,8 +138,14 @@ async function requestInterceptor<D>(
 
     config.adapter = async () => {
       let data;
-      if (config.responseType === "stream") {
+      if (
+        config.responseType === "stream" ||
+        config.responseType == "arraybuffer"
+      ) {
         data = createReadStream(responsePath);
+        if (config.responseType == "arraybuffer") {
+          data = await buffer(data);
+        }
       } else {
         data = await readFile(responsePath, "utf-8");
       }
