@@ -14,6 +14,9 @@ import { URL } from "url";
 import { STATUS_CODES } from "http";
 import { makeURL } from "./makeURL.js";
 import { buffer } from "stream/consumers";
+import { pino } from "pino";
+
+const logger = pino({ name: "fauxy" });
 
 type AnyJson = boolean | number | string | null | JsonArray | JsonObject;
 interface JsonArray extends Array<AnyJson> {}
@@ -128,7 +131,11 @@ async function requestInterceptor<D>(
     } catch (error) {
       if (isErrnoException(error) && error.code === "ENOENT") {
         // TODO - wait for possible active recorder
-        console.log(`${metaPath} doesn't exist, recording`);
+        logger.warn(
+          { metaPath },
+          "Recording directory exists but meta.json doesn't, recording",
+          metaPath,
+        );
         return config;
       }
       throw error;
@@ -170,15 +177,15 @@ async function responseInterceptor<T, D>(
     return resp;
   }
   if (!resp.config.fauxy.matchedProxy) {
-    console.log("Response not intercepted: fauxy.matchedProxy is undefined");
+    logger.debug("Response not intercepted: fauxy.matchedProxy is undefined");
     return resp;
   }
   if (resp.config.fauxy.replayed) {
-    console.log("Replayed, skipping");
+    logger.debug("Replayed, skipping");
     return resp;
   }
   if (!resp.config.url) {
-    console.log(
+    logger.warn(
       "url missing on config, but supposed to be present when a request is active. Skipping fauxy",
     );
     return resp;
@@ -205,6 +212,7 @@ async function responseInterceptor<T, D>(
   if (Buffer.isBuffer(resp.data)) {
     await writeFile(contentPath, resp.data);
   } else if (typeof resp.data === "string") {
+    // TODO handle incoming encoding
     await writeFile(contentPath, resp.data, "utf8");
   } else if (resp.data instanceof Readable) {
     const writer = createWriteStream(contentPath);
