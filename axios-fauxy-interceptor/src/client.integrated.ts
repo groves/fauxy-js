@@ -16,7 +16,7 @@ const pathProxy: FauxyProxy = {
     };
   },
   libraryDir: "recordings",
-  headerProcessors: [],
+  headerStabilizers: [],
 };
 const noFauxy = {
   baseURL: "http://localhost:8080",

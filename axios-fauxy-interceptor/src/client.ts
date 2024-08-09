@@ -4,6 +4,7 @@ import axios, {
   AxiosInstance,
   CreateAxiosDefaults,
   InternalAxiosRequestConfig,
+  AxiosHeaders,
 } from "axios";
 import { opendir, readFile, mkdir, writeFile } from "fs/promises";
 import { Readable } from "stream";
@@ -28,14 +29,40 @@ type KeyMaker =
   | ((config: InternalFauxyRequestConfig) => JsonObject | null)
   | ((config: InternalFauxyRequestConfig) => Promise<JsonObject | null>);
 
-export interface FauxyProxy {
+type HeaderStabilizer = (headers: Headers) => void;
+
+export function headerDeleter(
+  headerName: string,
+  ...additionalNames: string[]
+): HeaderStabilizer {
+  const headersToDelete = [headerName, ...additionalNames];
+  return (headers: Headers) => {
+    headersToDelete.forEach((name) => headers.delete(name));
+  };
+}
+
+export class FauxyProxy {
   keyMaker: KeyMaker;
   libraryDir: string;
-  headerProcessors: object[];
+  headerStabilizers: HeaderStabilizer[];
+
+  constructor(
+    libraryDir: string,
+    keyMaker: KeyMaker,
+    headerStabilizers: HeaderStabilizer[] = [],
+    addDefaultHeaderStabilizer: boolean = true,
+  ) {
+    this.libraryDir = libraryDir;
+    this.keyMaker = keyMaker;
+
+    this.headerStabilizers = addDefaultHeaderStabilizer
+      ? [...headerStabilizers, headerDeleter("date")]
+      : headerStabilizers;
+  }
 }
 
 export interface FauxyHashResult {
-  libraryDir: string;
+  proxy: FauxyProxy;
   hashed: string;
 }
 
@@ -48,7 +75,7 @@ export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
 }
 
 export interface InternalFauxyConfig extends FauxyConfig {
-  matchedProxy?: FauxyHashResult;
+  matched?: FauxyHashResult;
   replayed: boolean;
   resolved: URL;
 }
@@ -78,6 +105,12 @@ const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
   return "fauxy" in resp.config;
 };
 
+export const isAxiosHeaders = (
+  headers: AxiosResponse["headers"],
+): headers is AxiosHeaders => {
+  return "setContentType" in headers;
+};
+
 const isErrnoException = (error: any): error is NodeJS.ErrnoException => {
   return (
     error instanceof Error &&
@@ -99,7 +132,7 @@ async function hash(
     }
 
     const hashed = await blake2b(JSON.stringify(key, null, 2), 160);
-    return { libraryDir: proxy.libraryDir, hashed };
+    return { proxy, hashed };
   }
 }
 
@@ -111,11 +144,14 @@ async function requestInterceptor<D>(
   }
 
   config.fauxy.resolved = makeURL(config);
-  config.fauxy.matchedProxy = await hash(config, config.fauxy);
-  if (!config.fauxy.matchedProxy) {
+  config.fauxy.matched = await hash(config, config.fauxy);
+  if (!config.fauxy.matched) {
     return config;
   }
-  const { libraryDir, hashed } = config.fauxy.matchedProxy;
+  const {
+    proxy: { libraryDir },
+    hashed,
+  } = config.fauxy.matched;
   const iter = await opendir(libraryDir, { recursive: true });
   for await (const entry of iter) {
     if (!entry.isDirectory() || entry.name !== hashed) {
@@ -142,6 +178,7 @@ async function requestInterceptor<D>(
     }
 
     const { status, headers } = JSON.parse(metaContent);
+    // TODO: set Date if not present
 
     config.adapter = async () => {
       let data;
@@ -176,7 +213,7 @@ async function responseInterceptor<T, D>(
   if (!isFauxyResponse(resp)) {
     return resp;
   }
-  if (!resp.config.fauxy.matchedProxy) {
+  if (!resp.config.fauxy.matched) {
     logger.debug("Response not intercepted: fauxy.matchedProxy is undefined");
     return resp;
   }
@@ -184,6 +221,13 @@ async function responseInterceptor<T, D>(
     logger.debug("Replayed, skipping");
     return resp;
   }
+  if (!isAxiosHeaders(resp.headers)) {
+    logger.warn(
+      "headers isn't an AxiosHeaders object, don't know how to deal with it",
+    );
+    return resp;
+  }
+
   if (!resp.config.url) {
     logger.warn(
       "url missing on config, but supposed to be present when a request is active. Skipping fauxy",
@@ -194,17 +238,34 @@ async function responseInterceptor<T, D>(
   const pathParts = resp.config.fauxy.resolved.pathname
     .split("/")
     .filter((s) => s !== "");
-  const { libraryDir, hashed } = resp.config.fauxy.matchedProxy;
-  const fullPath = path.join(libraryDir, ...pathParts, hashed);
+  const { proxy, hashed } = resp.config.fauxy.matched;
+  const fullPath = path.join(proxy.libraryDir, ...pathParts, hashed);
   await mkdir(fullPath, { recursive: true });
 
-  const metaData = {
-    status: resp.status,
-    headers: resp.headers,
-  };
+  let stabilizedHeaders = new Headers();
+  const headerCaseMap: { [key: string]: string } = {};
+
+  for (const [key, value] of resp.headers) {
+    headerCaseMap[key.toLowerCase()] = key;
+    if (Array.isArray(value)) {
+      value.forEach((v) => stabilizedHeaders.append(key, v));
+    } else if (value !== undefined && value !== null) {
+      stabilizedHeaders.set(key, value.toString());
+    }
+  }
+
+  for (const stabilizer of proxy.headerStabilizers) {
+    stabilizer(stabilizedHeaders);
+  }
+
+  const headers: { [key: string]: string } = {};
+  stabilizedHeaders.forEach((value, key) => {
+    headers[headerCaseMap[key.toLowerCase()] || key] = value;
+  });
+
   await writeFile(
     path.join(fullPath, "meta.json"),
-    JSON.stringify(metaData, null, 2),
+    JSON.stringify({ status: resp.status, headers }, null, 2),
   );
 
   // Write response.content file
