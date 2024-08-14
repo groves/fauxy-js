@@ -165,7 +165,9 @@ async function requestInterceptor<D>(
     }
 
     const { status, headers } = JSON.parse(metaContent);
-    // TODO: set Date if not present
+    if (!headers["Date"] && !headers["date"]) {
+      headers["Date"] = new Date().toUTCString();
+    }
 
     config.adapter = async () => {
       let data;

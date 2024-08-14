@@ -75,5 +75,11 @@ describe("Fauxy interceptors", () => {
     const resp = await client.get("http://localhost/replacedwithfalse");
     // We have false in the recording, so if we don't replay it, we'll get the true from the adapter
     expect(resp.data).to.equal(false);
+
+    expect(resp.headers["Date"]).to.be.a("string");
+    const headerDate = new Date(resp.headers["Date"]);
+
+    const timeDifference = new Date().getTime() - headerDate.getTime();
+    expect(timeDifference).to.be.lessThan(1000); // Less than 1 second
   });
 });
