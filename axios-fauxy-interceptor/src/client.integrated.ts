@@ -3,21 +3,19 @@ import {
   FauxyProxy,
   InternalFauxyRequestConfig,
   create,
+  headerDeleter,
 } from "../src/client.js";
 import path from "path";
 import { readFile } from "fs/promises";
 import { buffer } from "stream/consumers";
 import { Axios } from "axios";
 
-const pathProxy: FauxyProxy = {
-  keyMaker: (config: InternalFauxyRequestConfig) => {
-    return {
-      path: config.fauxy.resolved.pathname,
-    };
-  },
-  libraryDir: "recordings",
-  headerStabilizers: [],
+const pathKey = (config: InternalFauxyRequestConfig) => {
+  return {
+    path: config.fauxy.resolved.pathname,
+  };
 };
+const pathProxy = { libraryDir: "recordings", keyMaker: pathKey };
 const noFauxy = {
   baseURL: "http://localhost:8080",
   fauxy: { proxies: [] },
@@ -25,7 +23,7 @@ const noFauxy = {
 const pathFauxy = {
   baseURL: "http://localhost:8080",
 
-  fauxy: { proxies: [pathProxy] },
+  fauxy: { headerStabilizers: [headerDeleter("Date")], proxies: [pathProxy] },
 };
 async function runPdfGauntlet(client: Axios) {
   const pdfPath = path.resolve(__dirname, "../../test-server/minimal.pdf");

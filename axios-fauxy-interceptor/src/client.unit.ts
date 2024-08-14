@@ -34,15 +34,13 @@ const nameKey = (config: InternalFauxyRequestConfig) => {
     path: config.fauxy.resolved.pathname,
   };
 };
-const pathProxy: FauxyProxy = {
-  keyMaker: nameKey,
-  libraryDir: "recordings",
-  headerStabilizers: [],
-};
 
 const pathFauxy = {
   adapter: dummyAdapter(true),
-  fauxy: { proxies: [pathProxy] },
+  fauxy: {
+    proxies: [{ keyMaker: nameKey, libraryDir: "recordings" }],
+    headerStabilizers: [headerDeleter("OnlyInLive", "Date")],
+  },
 };
 
 describe("Fauxy interceptors", () => {
@@ -57,14 +55,7 @@ describe("Fauxy interceptors", () => {
     const previous = join(__dirname, "../recordings/rerecord");
     await rm(previous, { recursive: true, force: true });
 
-    const client = create({
-      adapter: dummyAdapter(true),
-      fauxy: {
-        proxies: [
-          new FauxyProxy("recordings", nameKey, [headerDeleter("OnlyInLive")]),
-        ],
-      },
-    });
+    const client = create(pathFauxy);
     const resp = await client.get("http://localhost/rerecord");
     expect(resp.data).to.equal(true);
     expect(resp.headers["OnlyInLive"]).to.equal("I'm here!");

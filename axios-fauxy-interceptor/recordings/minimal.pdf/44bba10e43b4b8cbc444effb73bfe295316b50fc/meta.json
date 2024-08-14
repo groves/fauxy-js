@@ -1,9 +1,8 @@
 {
   "status": 200,
   "headers": {
-    "content-type": "application/pdf",
-    "date": "Wed, 07 Aug 2024 11:56:39 GMT",
     "connection": "keep-alive",
+    "content-type": "application/pdf",
     "keep-alive": "timeout=72",
     "transfer-encoding": "chunked"
   }

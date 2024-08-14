@@ -41,24 +41,10 @@ export function headerDeleter(
   };
 }
 
-export class FauxyProxy {
+export interface FauxyProxy {
   keyMaker: KeyMaker;
   libraryDir: string;
-  headerStabilizers: HeaderStabilizer[];
-
-  constructor(
-    libraryDir: string,
-    keyMaker: KeyMaker,
-    headerStabilizers: HeaderStabilizer[] = [],
-    addDefaultHeaderStabilizer: boolean = true,
-  ) {
-    this.libraryDir = libraryDir;
-    this.keyMaker = keyMaker;
-
-    this.headerStabilizers = addDefaultHeaderStabilizer
-      ? [...headerStabilizers, headerDeleter("date")]
-      : headerStabilizers;
-  }
+  headerStabilizers?: HeaderStabilizer[];
 }
 
 export interface FauxyHashResult {
@@ -68,6 +54,7 @@ export interface FauxyHashResult {
 
 export interface FauxyConfig {
   proxies: FauxyProxy[];
+  headerStabilizers?: HeaderStabilizer[];
 }
 
 export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
@@ -254,7 +241,10 @@ async function responseInterceptor<T, D>(
     }
   }
 
-  for (const stabilizer of proxy.headerStabilizers) {
+  for (const stabilizer of [
+    ...(resp.config.fauxy.headerStabilizers ?? []),
+    ...(proxy.headerStabilizers ?? []),
+  ]) {
     stabilizer(stabilizedHeaders);
   }
 
