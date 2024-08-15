@@ -6,8 +6,9 @@ import {
   create,
   headerDeleter,
   isAxiosHeaders,
+  isFauxyResponse,
 } from "../src/client.js";
-import { rm } from "fs/promises";
+import { readFile, rm } from "fs/promises";
 import { join } from "path";
 
 const dummyAdapter = <T,>(data: T) => {
@@ -38,8 +39,13 @@ const nameKey = (config: InternalFauxyRequestConfig) => {
 const pathFauxy = {
   adapter: dummyAdapter(true),
   fauxy: {
-    proxies: [{ keyMaker: nameKey, libraryDir: "recordings" }],
-    headerStabilizers: [headerDeleter("OnlyInLive", "Date")],
+    proxies: [
+      {
+        keyMaker: nameKey,
+        libraryDir: "recordings",
+        headerStabilizers: [headerDeleter("OnlyInLive")],
+      },
+    ],
   },
 };
 
@@ -52,13 +58,31 @@ describe("Fauxy interceptors", () => {
     expect(resp.data).to.equal(true);
   });
   it("record", async () => {
-    const previous = join(__dirname, "../recordings/rerecord");
-    await rm(previous, { recursive: true, force: true });
+    const nameDir = join(__dirname, "../recordings/rerecord");
+    await rm(nameDir, { recursive: true, force: true });
 
     const client = create(pathFauxy);
     const resp = await client.get("http://localhost/rerecord");
     expect(resp.data).to.equal(true);
     expect(resp.headers["OnlyInLive"]).to.equal("I'm here!");
+    if (isFauxyResponse(resp)) {
+      if (resp.config.fauxy.matched !== undefined) {
+        const metaPath = join(
+          nameDir,
+          resp.config.fauxy.matched.hashed,
+          "meta.json",
+        );
+        const metaContent = await readFile(metaPath, "utf-8");
+        const { status, headers } = JSON.parse(metaContent);
+        expect(headers).to.have.property("Content-Type");
+        expect(headers).to.not.have.property("Date");
+        expect(headers).to.not.have.property("OnlyInLive");
+      } else {
+        expect.fail("Fauxy should've matched, but it's undefined");
+      }
+    } else {
+      expect.fail("Resp should be a fauxy response");
+    }
 
     const respWithRecording = await client.get("http://localhost/rerecord", {
       adapter: dummyAdapter(false),
@@ -69,6 +93,7 @@ describe("Fauxy interceptors", () => {
     } else {
       expect.fail("Headers should be AxiosHeaders");
     }
+    expect(resp.headers["Date"]).to.be.a("string");
   });
   it("replay recordings", async () => {
     const client = create(pathFauxy);

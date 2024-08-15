@@ -88,7 +88,9 @@ const isFauxyRequest = (
 ): config is InternalFauxyRequestConfig => {
   return "fauxy" in config;
 };
-const isFauxyResponse = (resp: AxiosResponse): resp is FauxyAxiosResponse => {
+export const isFauxyResponse = (
+  resp: AxiosResponse,
+): resp is FauxyAxiosResponse => {
   return "fauxy" in resp.config;
 };
 
@@ -242,7 +244,6 @@ async function responseInterceptor<T, D>(
       stabilizedHeaders.set(key, value.toString());
     }
   }
-
   for (const stabilizer of [
     ...(resp.config.fauxy.headerStabilizers ?? []),
     ...(proxy.headerStabilizers ?? []),
@@ -287,10 +288,16 @@ export interface CreateFauxyDefaults<D = any> extends CreateAxiosDefaults<D> {
 }
 
 export function create<D>(config?: CreateFauxyDefaults<D>): FauxyAxiosInstance {
-  if (!config) {
-    config = { fauxy: { proxies: [] } };
+  const axiosDefaultsWithFauxy = axios.defaults as typeof axios.defaults & {
+    fauxy?: FauxyConfig;
+  };
+  if (!axiosDefaultsWithFauxy.fauxy) {
+    axiosDefaultsWithFauxy.fauxy = {
+      proxies: [],
+      headerStabilizers: [headerDeleter("date")],
+    };
   }
-  const client = axios.create(config);
+  const client = axios.create(config) as FauxyAxiosInstance;
   client.interceptors.request.use(requestInterceptor);
   client.interceptors.response.use(responseInterceptor);
   return client;

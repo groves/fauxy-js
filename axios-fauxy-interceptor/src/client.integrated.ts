@@ -23,7 +23,7 @@ const noFauxy = {
 const pathFauxy = {
   baseURL: "http://localhost:8080",
 
-  fauxy: { headerStabilizers: [headerDeleter("Date")], proxies: [pathProxy] },
+  fauxy: { proxies: [pathProxy] },
 };
 async function runPdfGauntlet(client: Axios) {
   const pdfPath = path.resolve(__dirname, "../../test-server/minimal.pdf");
