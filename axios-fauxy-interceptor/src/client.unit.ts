@@ -107,4 +107,17 @@ describe("Fauxy interceptors", () => {
     const timeDifference = new Date().getTime() - headerDate.getTime();
     expect(timeDifference).to.be.lessThan(1000); // Less than 1 second
   });
+
+  it("handles parallel requests correctly", async () => {
+    const nameDir = join(__dirname, "../recordings/parallel");
+    await rm(nameDir, { recursive: true, force: true });
+    const client = create(pathFauxy);
+    const [resp1, resp2] = await Promise.all([
+      client.get("http://localhost/parallel"),
+      client.get("http://localhost/parallel", { adapter: dummyAdapter(false) }),
+    ]);
+
+    expect(resp1.data).to.equal(true);
+    expect(resp2.data).to.equal(true);
+  });
 });

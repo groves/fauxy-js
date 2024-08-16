@@ -125,22 +125,17 @@ async function hash(
   }
 }
 
-async function requestInterceptor<D>(
-  config: InternalAxiosRequestConfig<D>,
-): Promise<InternalAxiosRequestConfig<D>> {
-  if (!isFauxyRequest(config)) {
-    return config;
-  }
-
-  config.fauxy.resolved = makeURL(config);
-  config.fauxy.matched = await hash(config, config.fauxy);
-  if (!config.fauxy.matched) {
-    return config;
-  }
+const runningInterceptors: {
+  [key: string]: { promise: Promise<void>; resolver: () => void } | undefined;
+} = {};
+async function checkMatch(
+  config: InternalFauxyRequestConfig,
+  matched: FauxyHashResult,
+) {
   const {
     proxy: { libraryDir },
     hashed,
-  } = config.fauxy.matched;
+  } = matched;
   const iter = await opendir(libraryDir, { recursive: true });
   for await (const entry of iter) {
     if (!entry.isDirectory() || entry.name !== hashed) {
@@ -155,13 +150,15 @@ async function requestInterceptor<D>(
       metaContent = await readFile(metaPath, "utf-8");
     } catch (error) {
       if (isErrnoException(error) && error.code === "ENOENT") {
-        // TODO - wait for possible active recorder
+        if (runningInterceptors[hashed]) {
+          return false;
+        }
         logger.warn(
           { metaPath },
           "Recording directory exists but meta.json doesn't, recording",
           metaPath,
         );
-        return config;
+        return true;
       }
       throw error;
     }
@@ -193,7 +190,40 @@ async function requestInterceptor<D>(
         config,
       };
     };
-    break;
+    return true;
+  }
+  if (runningInterceptors[hashed]) {
+    return false;
+  } else {
+    let resolver = () => {};
+    const promise = new Promise<void>((resolve) => {
+      resolver = resolve;
+    });
+    runningInterceptors[hashed] = { promise, resolver };
+    return true;
+  }
+}
+
+async function requestInterceptor<D>(
+  config: InternalAxiosRequestConfig<D>,
+): Promise<InternalAxiosRequestConfig<D>> {
+  if (!isFauxyRequest(config)) {
+    return config;
+  }
+
+  config.fauxy.resolved = makeURL(config);
+  config.fauxy.matched = await hash(config, config.fauxy);
+  if (!config.fauxy.matched) {
+    return config;
+  }
+
+  while (true) {
+    const runner = runningInterceptors[config.fauxy.matched.hashed];
+    if (runner !== undefined) {
+      await runner.promise;
+    } else if (await checkMatch(config, config.fauxy.matched)) {
+      break;
+    }
   }
   return config;
 }
@@ -278,6 +308,11 @@ async function responseInterceptor<T, D>(
   } else {
     // If it's an object (e.g., parsed JSON), stringify it
     await writeFile(contentPath, JSON.stringify(resp.data), "utf8");
+  }
+
+  if (runningInterceptors[hashed]) {
+    runningInterceptors[hashed].resolver();
+    delete runningInterceptors[hashed];
   }
 
   return resp;
