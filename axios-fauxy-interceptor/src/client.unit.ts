@@ -11,15 +11,14 @@ import {
 import { readFile, rm } from "fs/promises";
 import { join } from "path";
 
-const dummyAdapter = <T,>(data: T) => {
+const dummyAdapter = <T,>(data: T, status = 200) => {
   return async (
     config: InternalAxiosRequestConfig,
   ): Promise<AxiosResponse<T>> => {
-    // TODO check response code as we can't use settle
     return {
       data,
-      status: 200,
-      statusText: "200 OK",
+      status,
+      statusText: status === 200 ? "200 OK" : "500 Internal Server Error",
       headers: {
         "Content-Type": "application/json",
         Date: new Date().toUTCString(),
@@ -119,5 +118,23 @@ describe("Fauxy interceptors", () => {
 
     expect(resp1.data).to.equal(true);
     expect(resp2.data).to.equal(true);
+  });
+
+  it("records and replays 500 status correctly", async () => {
+    const nameDir = join(__dirname, "../recordings/error500");
+    await rm(nameDir, { recursive: true, force: true });
+
+    const client = create(pathFauxy);
+
+    const adapter = dummyAdapter({ error: "Internal Server Error" }, 500);
+    const resp = await client.get("http://localhost/error500", {
+      adapter,
+    });
+    expect(resp.status).to.equal(500);
+    expect(resp.data).to.deep.equal({ error: "Internal Server Error" });
+
+    const replayResp = await client.get("http://localhost/error500");
+    expect(replayResp.status).to.equal(500);
+    expect(replayResp.data).to.deep.equal({ error: "Internal Server Error" });
   });
 });
