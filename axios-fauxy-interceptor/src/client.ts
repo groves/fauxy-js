@@ -63,7 +63,6 @@ export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
 
 export interface InternalFauxyConfig extends FauxyConfig {
   matched?: FauxyHashResult;
-  replayed: boolean;
   resolved: URL;
 }
 
@@ -181,7 +180,6 @@ async function checkMatch(
       } else {
         data = await readFile(responsePath, "utf-8");
       }
-      config.fauxy.replayed = true;
       return {
         status,
         statusText: STATUS_CODES[status] || "Unknown",
@@ -227,39 +225,20 @@ async function requestInterceptor<D>(
   }
   return config;
 }
-
-async function responseInterceptor<T, D>(
+async function record<T, D>(
   resp: AxiosResponse<T, D>,
-): Promise<AxiosResponse<T, D>> {
-  if (!isFauxyResponse(resp)) {
-    return resp;
-  }
-  if (!resp.config.fauxy.matched) {
-    logger.debug("Response not intercepted: fauxy.matchedProxy is undefined");
-    return resp;
-  }
-  if (resp.config.fauxy.replayed) {
-    logger.debug("Replayed, skipping");
-    return resp;
-  }
+  fauxy: InternalFauxyConfig,
+  matched: FauxyHashResult,
+): Promise<void> {
   if (!isAxiosHeaders(resp.headers)) {
     logger.warn(
       "headers isn't an AxiosHeaders object, don't know how to deal with it",
     );
-    return resp;
+    return;
   }
 
-  if (!resp.config.url) {
-    logger.warn(
-      "url missing on config, but supposed to be present when a request is active. Skipping fauxy",
-    );
-    return resp;
-  }
-
-  const pathParts = resp.config.fauxy.resolved.pathname
-    .split("/")
-    .filter((s) => s !== "");
-  const { proxy, hashed } = resp.config.fauxy.matched;
+  const pathParts = fauxy.resolved.pathname.split("/").filter((s) => s !== "");
+  const { proxy, hashed } = matched;
   const fullPath = path.join(proxy.libraryDir, ...pathParts, hashed);
   await mkdir(fullPath, { recursive: true });
 
@@ -275,7 +254,7 @@ async function responseInterceptor<T, D>(
     }
   }
   for (const stabilizer of [
-    ...(resp.config.fauxy.headerStabilizers ?? []),
+    ...(fauxy.headerStabilizers ?? []),
     ...(proxy.headerStabilizers ?? []),
   ]) {
     stabilizer(stabilizedHeaders);
@@ -291,7 +270,6 @@ async function responseInterceptor<T, D>(
     JSON.stringify({ status: resp.status, headers }, null, 2),
   );
 
-  // Write response.content file
   const contentPath = path.join(fullPath, "response.content");
   if (Buffer.isBuffer(resp.data)) {
     await writeFile(contentPath, resp.data);
@@ -309,9 +287,28 @@ async function responseInterceptor<T, D>(
     // If it's an object (e.g., parsed JSON), stringify it
     await writeFile(contentPath, JSON.stringify(resp.data), "utf8");
   }
+}
 
-  if (runningInterceptors[hashed]) {
-    runningInterceptors[hashed].resolver();
+async function responseInterceptor<T, D>(
+  resp: AxiosResponse<T, D>,
+): Promise<AxiosResponse<T, D>> {
+  if (!isFauxyResponse(resp)) {
+    return resp;
+  }
+  if (!resp.config.fauxy.matched) {
+    logger.debug("Response not intercepted: fauxy.matched is undefined");
+    return resp;
+  }
+  const hashed = resp.config.fauxy.matched.hashed;
+  const recordPromise = runningInterceptors[hashed];
+  if (recordPromise === undefined) {
+    logger.debug("Replayed, skipping");
+    return resp;
+  }
+  try {
+    await record(resp, resp.config.fauxy, resp.config.fauxy.matched);
+  } finally {
+    recordPromise.resolver();
     delete runningInterceptors[hashed];
   }
 

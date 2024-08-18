@@ -73,7 +73,7 @@ describe("Fauxy interceptors", () => {
           "meta.json",
         );
         const metaContent = await readFile(metaPath, "utf-8");
-        const { status, headers } = JSON.parse(metaContent);
+        const { headers } = JSON.parse(metaContent);
         expect(headers).to.have.property("Content-Type");
         expect(headers).to.not.have.property("Date");
         expect(headers).to.not.have.property("OnlyInLive");
