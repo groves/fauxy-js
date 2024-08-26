@@ -40,7 +40,7 @@ interface FauxyHashResult {
   hashed: string;
 }
 
-export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
+interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
   fauxy: FauxyConfig;
 }
 
@@ -184,11 +184,9 @@ async function checkMatch(
   }
 }
 
-let i = 0;
 async function requestInterceptor<D>(
   config: InternalAxiosRequestConfig<D>,
 ): Promise<InternalAxiosRequestConfig<D>> {
-  const id = i++;
   if (!isFauxyRequest(config)) {
     return config;
   }
