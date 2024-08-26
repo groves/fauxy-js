@@ -1,5 +1,4 @@
 import axios, {
-  AxiosRequestConfig,
   AxiosResponse,
   AxiosInstance,
   CreateAxiosDefaults,
@@ -38,10 +37,6 @@ export function headerDeleter(
 interface FauxyHashResult {
   proxy: FauxyProxy;
   hashed: string;
-}
-
-interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
-  fauxy: FauxyConfig;
 }
 
 interface InternalFauxyConfig extends FauxyConfig {
