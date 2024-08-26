@@ -16,20 +16,14 @@ import { STATUS_CODES } from "http";
 import { makeURL } from "./makeURL.js";
 import { buffer } from "stream/consumers";
 import { pino } from "pino";
+import {
+  FauxyConfig,
+  FauxyProxy,
+  FauxyRequest,
+  HeaderStabilizer,
+} from "./types.js";
 
 const logger = pino({ name: "fauxy" });
-
-type AnyJson = boolean | number | string | null | JsonArray | JsonObject;
-interface JsonArray extends Array<AnyJson> {}
-interface JsonObject {
-  [key: string]: AnyJson;
-}
-
-type KeyMaker =
-  | ((config: InternalFauxyRequestConfig) => JsonObject | null)
-  | ((config: InternalFauxyRequestConfig) => Promise<JsonObject | null>);
-
-type HeaderStabilizer = (headers: Headers) => void;
 
 export function headerDeleter(
   headerName: string,
@@ -41,38 +35,26 @@ export function headerDeleter(
   };
 }
 
-export interface FauxyProxy {
-  keyMaker: KeyMaker;
-  libraryDir: string;
-  headerStabilizers?: HeaderStabilizer[];
-}
-
-export interface FauxyHashResult {
+interface FauxyHashResult {
   proxy: FauxyProxy;
   hashed: string;
-}
-
-export interface FauxyConfig {
-  proxies: FauxyProxy[];
-  headerStabilizers?: HeaderStabilizer[];
 }
 
 export interface FauxyRequestConfig<D = any> extends AxiosRequestConfig<D> {
   fauxy: FauxyConfig;
 }
 
-export interface InternalFauxyConfig extends FauxyConfig {
+interface InternalFauxyConfig extends FauxyConfig {
   matched?: FauxyHashResult;
   resolved: URL;
 }
 
-export interface InternalFauxyRequestConfig<D = any>
+interface InternalFauxyRequestConfig<D = any>
   extends InternalAxiosRequestConfig<D> {
   fauxy: InternalFauxyConfig;
 }
 
-export interface FauxyAxiosResponse<R = any, D = any>
-  extends AxiosResponse<R, D> {
+interface FauxyAxiosResponse<R = any, D = any> extends AxiosResponse<R, D> {
   config: InternalFauxyRequestConfig<D>;
 }
 
@@ -110,11 +92,11 @@ const isErrnoException = (error: any): error is NodeJS.ErrnoException => {
 };
 
 async function hash(
-  config: InternalFauxyRequestConfig,
+  req: FauxyRequest,
   fauxy: FauxyConfig,
 ): Promise<FauxyHashResult | undefined> {
   for (const proxy of fauxy.proxies) {
-    const key = await Promise.resolve(proxy.keyMaker(config));
+    const key = await Promise.resolve(proxy.keyMaker(req));
     if (key === null) {
       continue;
     }
@@ -202,15 +184,33 @@ async function checkMatch(
   }
 }
 
+let i = 0;
 async function requestInterceptor<D>(
   config: InternalAxiosRequestConfig<D>,
 ): Promise<InternalAxiosRequestConfig<D>> {
+  const id = i++;
   if (!isFauxyRequest(config)) {
     return config;
   }
 
   config.fauxy.resolved = makeURL(config);
-  config.fauxy.matched = await hash(config, config.fauxy);
+  const headers = new Headers();
+
+  for (const [key, value] of config.headers) {
+    if (Array.isArray(value)) {
+      value.forEach((v) => headers.append(key, v));
+    } else if (value !== undefined && value !== null) {
+      headers.set(key, value.toString());
+    }
+  }
+
+  const req: FauxyRequest = {
+    url: makeURL(config),
+    method: (config.method ?? "GET").toUpperCase(),
+    headers,
+    data: config.data,
+  };
+  config.fauxy.matched = await hash(req, config.fauxy);
   if (!config.fauxy.matched) {
     return config;
   }

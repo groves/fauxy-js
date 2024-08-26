@@ -1,7 +1,16 @@
 import assert from "assert";
 import { create } from "./client.js";
 
-const client = create();
+const client = create({
+  fauxy: {
+    proxies: [
+      {
+        keyMaker: (req) => ({ path: req.url.pathname }),
+        libraryDir: "recordings",
+      },
+    ],
+  },
+});
 
 async function main(p0: number) {
   const resp = await client.get("http://localhost:8080/ping");

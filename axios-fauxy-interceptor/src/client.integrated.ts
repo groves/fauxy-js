@@ -1,20 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  FauxyProxy,
-  InternalFauxyRequestConfig,
-  create,
-  headerDeleter,
-} from "../src/client.js";
+import { create } from "../src/client.js";
 import path from "path";
 import { readFile } from "fs/promises";
 import { buffer } from "stream/consumers";
 import { Axios } from "axios";
+import { FauxyRequest } from "./types.js";
 
-const pathKey = (config: InternalFauxyRequestConfig) => {
-  return {
-    path: config.fauxy.resolved.pathname,
-  };
-};
+const pathKey = (req: FauxyRequest) => ({ path: req.url.pathname });
 const pathProxy = { libraryDir: "recordings", keyMaker: pathKey };
 const noFauxy = {
   baseURL: "http://localhost:8080",

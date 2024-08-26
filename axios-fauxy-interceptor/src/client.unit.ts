@@ -1,8 +1,6 @@
 import { AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import {
-  FauxyProxy,
-  InternalFauxyRequestConfig,
   create,
   headerDeleter,
   isAxiosHeaders,
@@ -10,6 +8,7 @@ import {
 } from "../src/client.js";
 import { readFile, rm } from "fs/promises";
 import { join } from "path";
+import { FauxyRequest } from "./types.js";
 
 const dummyAdapter = <T,>(data: T, status = 200) => {
   return async (
@@ -29,11 +28,9 @@ const dummyAdapter = <T,>(data: T, status = 200) => {
     };
   };
 };
-const nameKey = (config: InternalFauxyRequestConfig) => {
-  return {
-    path: config.fauxy.resolved.pathname,
-  };
-};
+const nameKey = (req: FauxyRequest) => ({
+  path: req.url.pathname,
+});
 
 const pathFauxy = {
   adapter: dummyAdapter(true),
@@ -116,8 +113,13 @@ describe("Fauxy interceptors", () => {
       client.get("http://localhost/parallel", { adapter: dummyAdapter(false) }),
     ]);
 
-    expect(resp1.data).to.equal(true);
-    expect(resp2.data).to.equal(true);
+    // We don't know which of the above two will execute first and fill the cache.
+    // However, whichever executes first, we expect the one that goes second will get its value.
+    // So these responses should be the same...
+    expect(resp1.data).to.equal(resp2.data);
+
+    // Because it can change which returns first, we delete the recording to squash spurious diffs
+    await rm(nameDir, { recursive: true, force: true });
   });
 
   it("records and replays 500 status correctly", async () => {
