@@ -45,12 +45,12 @@ describe("Fauxy interceptors", () => {
   it("don't get in the way without proxying", async () => {
     const client = create(noFauxy);
     const resp = await client.get("/ping");
-    expect(resp.data).to.match(/pong \d+\n/);
+    expect(resp.data).to.match(/pong \d+/);
   });
   it("replay recordings", async () => {
     const client = create(pathFauxy);
     const resp = await client.get("ping");
-    expect(resp.data).to.equal("pong 0\n");
+    expect(resp.data).to.equal("pong 0");
   });
   it("replays non-json", async () => {
     await runPdfGauntlet(create(pathFauxy));

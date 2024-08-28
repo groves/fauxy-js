@@ -3,16 +3,24 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "LICENSE", "README.md"],
+  "scripts": {
+    "prepare": "tsc"
+  },
   "devDependencies": {
-    "@tsconfig/node20": "^20.1.4",
-    "@types/node": "^20.14.13",
-    "tsx": "^4.16.2",
+    "@tsconfig/node18": "^18.2.4",
+    "@types/node": "^18.0",
     "typescript": "^5.5.4",
-    "vitest": "^2.0.4"
+    "vitest": "^2.0.5"
   },
   "dependencies": {
-    "axios": "^1.7.2",
+    "axios": "^1.7.5",
     "hash-wasm": "^4.11.0",
     "pino": "^9.3.2"
+  },
+  "engines": {
+    "node": "^18.17.0 || >=20.0.0"
   }
 }

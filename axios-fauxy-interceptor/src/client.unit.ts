@@ -1,10 +1,11 @@
 import { AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { describe, expect, it, test } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   create,
   headerDeleter,
   isAxiosHeaders,
   isFauxyResponse,
+  makeURL,
 } from "../src/client.js";
 import { readFile, rm } from "fs/promises";
 import { join } from "path";
@@ -138,5 +139,25 @@ describe("Fauxy interceptors", () => {
     const replayResp = await client.get("http://localhost/error500");
     expect(replayResp.status).to.equal(500);
     expect(replayResp.data).to.deep.equal({ error: "Internal Server Error" });
+  });
+});
+describe("makeURL", () => {
+  it("handles no base", async () => {
+    expect(makeURL({ url: "/" })).to.deep.equal(new URL("http://localhost"));
+  });
+  it("handles only base", async () => {
+    expect(makeURL({ baseURL: "http://example.com/base" })).to.deep.equal(
+      new URL("http://example.com/base"),
+    );
+  });
+  it("handles base and url", async () => {
+    expect(
+      makeURL({ url: "sub", baseURL: "http://example.com/base" }),
+    ).to.deep.equal(new URL("http://example.com/base/sub"));
+  });
+  it("handles params", async () => {
+    expect(makeURL({ url: "/", params: { foo: 1 } })).to.deep.equal(
+      new URL("http://localhost?foo=1"),
+    );
   });
 });

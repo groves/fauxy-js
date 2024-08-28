@@ -5,7 +5,7 @@ const server = fastify();
 
 let count = 0;
 server.get("/ping", async (request, reply) => {
-  return `pong ${count++}\n`;
+  return `pong ${count++}`;
 });
 server.get("/minimal.pdf", async (request, reply) => {
   const stream = createReadStream("minimal.pdf");

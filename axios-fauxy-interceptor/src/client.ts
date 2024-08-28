@@ -4,6 +4,7 @@ import axios, {
   CreateAxiosDefaults,
   InternalAxiosRequestConfig,
   AxiosHeaders,
+  AxiosRequestConfig,
 } from "axios";
 import { opendir, readFile, mkdir, writeFile } from "fs/promises";
 import { Readable } from "stream";
@@ -12,7 +13,6 @@ import path from "path";
 import { blake2b } from "hash-wasm";
 import { URL } from "url";
 import { STATUS_CODES } from "http";
-import { makeURL } from "./makeURL.js";
 import { buffer } from "stream/consumers";
 import { pino } from "pino";
 import {
@@ -121,7 +121,7 @@ async function checkMatch(
     const metaPath = path.join(entryPath, "meta.json");
     const responsePath = path.join(entryPath, "response.content");
 
-    let metaContent;
+    let metaContent: string;
     try {
       metaContent = await readFile(metaPath, "utf-8");
     } catch (error) {
@@ -145,7 +145,7 @@ async function checkMatch(
     }
 
     config.adapter = async () => {
-      let data;
+      let data: string | Buffer | AsyncIterable<any>;
       if (
         config.responseType === "stream" ||
         config.responseType == "arraybuffer"
@@ -177,6 +177,11 @@ async function checkMatch(
     runningInterceptors[hashed] = { promise, resolver };
     return true;
   }
+}
+
+export function makeURL(config: AxiosRequestConfig): URL {
+  const uri = axios.getUri(config);
+  return new URL(uri, "http://localhost");
 }
 
 async function requestInterceptor<D>(

@@ -2,7 +2,7 @@
   "status": 200,
   "headers": {
     "connection": "keep-alive",
-    "content-length": "7",
+    "content-length": "6",
     "content-type": "text/plain; charset=utf-8",
     "keep-alive": "timeout=72"
   }
