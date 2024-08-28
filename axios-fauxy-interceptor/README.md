@@ -23,7 +23,7 @@ const [first, second] = await Promise.all([ping(1), ping(2)]);
 assert(first === second);
 ```
 
-If we're running [this server](../test-server/src/index.ts) that returns an incremented number on each fetch of `/ping`,
+If we're running [this server](https://github.com/groves/fauxy-js/blob/main/test-server/src/index.ts) that returns an incremented number on each fetch of `/ping`,
 this will print the following:
 
 ```
