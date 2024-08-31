@@ -117,7 +117,14 @@ async function checkMatch(
     if (!entry.isDirectory() || entry.name !== hashed) {
       continue;
     }
-    const entryPath = path.join(entry.parentPath, entry.name);
+    // Dirent.parentPath wasn't added till Node 18.20
+    // From 18.17 through 18.19, Dirent.path was there instead.
+    // It's deprecated with the addition of parentPath, so only use path in versions where
+    // parentPath is undefined.
+    const entryPath = entry.parentPath
+      ? path.join(entry.parentPath, entry.name)
+      : // Cast to silence the entry.path deprecation warning
+        (entry as any).path;
     const metaPath = path.join(entryPath, "meta.json");
     const responsePath = path.join(entryPath, "response.content");
 
