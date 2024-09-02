@@ -1,2 +1,7 @@
 export * from "./types.js";
-export { create, headerDeleter } from "./client.js";
+export {
+  create,
+  CreateFauxyDefaults,
+  headerDeleter,
+  FauxyAxiosInstance,
+} from "./client.js";

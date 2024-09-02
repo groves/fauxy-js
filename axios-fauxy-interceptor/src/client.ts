@@ -194,7 +194,7 @@ export function makeURL(config: AxiosRequestConfig): URL {
 async function requestInterceptor<D>(
   config: InternalAxiosRequestConfig<D>,
 ): Promise<InternalAxiosRequestConfig<D>> {
-  if (!isFauxyRequest(config)) {
+  if (!isFauxyRequest(config) || config.fauxy.proxies.length === 0) {
     return config;
   }
 
