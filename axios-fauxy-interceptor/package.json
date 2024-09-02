@@ -1,13 +1,13 @@
 {
   "name": "axios-fauxy-interceptor",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/groves/fauxy-js.git",
+    "url": "git+https://github.com/groves/fauxy-js.git",
     "directory": "axios-fauxy-interceptor"
   },
   "files": [
