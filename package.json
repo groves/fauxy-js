@@ -1,0 +1,8 @@
+{
+  "name": "fauxy-js",
+  "private": true,
+  "workspaces": [
+    "axios-fauxy-interceptor",
+    "test-server"
+  ]
+}
