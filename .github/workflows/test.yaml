@@ -1,0 +1,27 @@
+name: Test
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Test 18.19 as it has recursive walking but not parentPath
+        # See https://github.com/groves/fauxy-js/commit/dad0d479358714864df962c8f37178efd384ee4e
+        node-version: [18.19, 18.x, 20.x, 22.x]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    - run: npm ci
+    - name: Run test server
+      working-directory: test-server
+      run: npm start &
+    - run: npm test
+      working-directory: axios-fauxy-interceptor

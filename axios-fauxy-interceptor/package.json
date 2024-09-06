@@ -16,7 +16,8 @@
     "README.md"
   ],
   "scripts": {
-    "prepare": "tsc"
+    "prepare": "tsc",
+    "test": "vitest"
   },
   "devDependencies": {
     "@tsconfig/node18": "^18.2.4",
