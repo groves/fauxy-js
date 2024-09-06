@@ -21,6 +21,7 @@ import {
   FauxyRequest,
   HeaderStabilizer,
 } from "./types.js";
+import { Dirent } from "fs";
 
 const logger = pino({ name: "fauxy" });
 
@@ -101,6 +102,26 @@ async function hash(
   }
 }
 
+async function* ignoreENOENTIterator(it: AsyncIterator<Dirent>) {
+  while (true) {
+    try {
+      const { value, done } = await it.next();
+      if (done) {
+        break;
+      }
+      yield value;
+    } catch (error) {
+      if (!isErrnoException(error) || error.code !== "ENOENT") {
+        throw error;
+      }
+      logger.debug(
+        { error },
+        "Entry disappeared after listing but before we got to it, skipping",
+      );
+    }
+  }
+}
+
 const runningInterceptors: {
   [key: string]: { promise: Promise<void>; resolver: () => void } | undefined;
 } = {};
@@ -112,8 +133,9 @@ async function checkMatch(
     proxy: { libraryDir },
     hashed,
   } = matched;
-  const iter = await opendir(libraryDir, { recursive: true });
-  for await (const entry of iter) {
+
+  const dir = await opendir(libraryDir, { recursive: true });
+  for await (const entry of ignoreENOENTIterator(dir[Symbol.asyncIterator]())) {
     if (!entry.isDirectory() || entry.name !== hashed) {
       continue;
     }
